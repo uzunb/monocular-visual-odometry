@@ -3,6 +3,9 @@
 
 #include <ctype.h>
 
+#define FMT_HEADER_ONLY
+#include <fmt/format.h>
+
 #include <algorithm>  // for copy
 #include <chrono>
 #include <ctime>
@@ -26,7 +29,21 @@
 
 class VisualOdometry {
    private:
-    /* data */
+    cv::Mat K;
+    cv::Mat prevImage, currentImage;
+    std::vector<cv::Point2f> prevFeatures, currFeatures;
+    cv::Mat finalRotationVector, finalTranslationVector;
+    cv::Mat E, R, t, mask;
+    cv::Mat trajectoryMap;
+
+    // TODO: add a fucntion to load these values directly from KITTI's calib files
+    //  WARNING: different sequences in the KITTI VO dataset have different intrinsic/extrinsic
+    //  parameters
+    const double FOCAL_LENGTH = 718.856;
+    const double CX = 607.1928;
+    const double CY = 185.2157;
+    const cv::Point2d cameraPrincipalPoint = cv::Point2d(CX, CY);
+
    public:
     VisualOdometry();
     ~VisualOdometry();
@@ -36,6 +53,7 @@ class VisualOdometry {
     void featureDetection(cv::Mat img_1, std::vector<cv::Point2f>& points1);
 
     double getAbsoluteScale(int frame_id, int sequence_id, double z_cal);
+
     void readGroundTruthPoses();
 
     void run();

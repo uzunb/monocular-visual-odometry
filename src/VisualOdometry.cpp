@@ -1,72 +1,6 @@
 #include "VisualOdometry.hpp"
 
-VisualOdometry::VisualOdometry(/* args */) {
-    cv::Mat img_1, img_2;
-    cv::Mat finalRotationVector, finalTranslationVector;
-
-    std::ofstream myfile;
-    myfile.open("results1_1.txt");
-
-    double scale = 1.00;
-    char filename1[4000];
-    char filename2[4000];
-    std::string imagePath = Constant::Kitti::IMAGE_PATH / "%06d.png";
-    sprintf(filename1, imagePath.c_str(), 0);
-    sprintf(filename2, imagePath.c_str(), 1);
-
-    char text[100];
-    int fontFace = cv::FONT_HERSHEY_PLAIN;
-    double fontScale = 1;
-    int thickness = 1;
-    cv::Point textOrg(10, 50);
-
-    // read the first two frames from the dataset
-    cv::Mat img_1_c = cv::imread(filename1);
-    cv::Mat img_2_c = cv::imread(filename2);
-
-    if (!img_1_c.data || !img_2_c.data) {
-        std::cout << " --(!) Error reading images " << std::endl;
-        return -1;
-    }
-
-    // we work with grayscale images
-    cvtColor(img_1_c, img_1, cv::COLOR_BGR2GRAY);
-    cvtColor(img_2_c, img_2, cv::COLOR_BGR2GRAY);
-
-    // feature detection, tracking
-    std::vector<cv::Point2f> points1,
-        points2;                       // vectors to store the coordinates of the feature points
-    featureDetection(img_1, points1);  // detect features in img_1
-    std::vector<uchar> status;
-    featureTracking(img_1, img_2, points1, points2, status);  // track those features to img_2
-
-    // TODO: add a fucntion to load these values directly from KITTI's calib files
-    //  WARNING: different sequences in the KITTI VO dataset have different intrinsic/extrinsic
-    //  parameters
-    double cameraFocalLength = 718.8560;
-    cv::Point2d cameraPrincipalPoint(607.1928, 185.2157);
-
-    // recovering the pose and the essential matrix
-    cv::Mat E, R, t, mask;
-    E = cv::findEssentialMat(points2, points1, cameraFocalLength, cameraPrincipalPoint, cv::RANSAC,
-                             0.999, 1.0, mask);
-    cv::recoverPose(E, points2, points1, R, t, cameraFocalLength, cameraPrincipalPoint, mask);
-
-    cv::Mat prevImage = img_2;
-    cv::Mat currentImage;
-    std::vector<cv::Point2f> prevFeatures = points2;
-    std::vector<cv::Point2f> currFeatures;
-
-    char filename[100];
-
-    finalRotationVector = R.clone();
-    finalTranslationVector = t.clone();
-
-    // namedWindow("Road facing camera", WINDOW_AUTOSIZE);
-    // namedWindow("Trajectory Map", WINDOW_AUTOSIZE);
-
-    cv::Mat trajectoryMap = cv::Mat::zeros(600, 600, CV_8UC3);
-}
+VisualOdometry::VisualOdometry(/* args */) {}
 
 VisualOdometry::~VisualOdometry() {}
 
@@ -157,81 +91,92 @@ void VisualOdometry::readGroundTruthPoses() {
 }
 
 void VisualOdometry::run() {
+    this->warmup();
+
+    std::string filename;
+    std::filesystem::path imagePath = Constant::Kitti::IMAGE_PATH;
+    double scale = 1.00;
+
     float fps = 0.0;
     float averageFps = 0.0;
     auto begin = std::chrono::high_resolution_clock::now();
 
     for (int numFrame = 2; numFrame < MAX_FRAME; numFrame++) {
-        sprintf(filename, imagePath.c_str(), numFrame);
+        filename = (imagePath / fmt::format("{:06d}.png", numFrame)).string();
 
-        currentImage = imread(filename, cv::IMREAD_GRAYSCALE);
+        this->currentImage = imread(filename, cv::IMREAD_GRAYSCALE);
         std::vector<uchar> status;
-        featureTracking(prevImage, currentImage, prevFeatures, currFeatures, status);
+        featureTracking(this->prevImage, this->currentImage, this->prevFeatures, this->currFeatures,
+                        status);
 
-        E = cv::findEssentialMat(currFeatures, prevFeatures, cameraFocalLength,
-                                 cameraPrincipalPoint, cv::RANSAC, 0.999, 1.0, mask);
-        cv::recoverPose(E, currFeatures, prevFeatures, R, t, cameraFocalLength,
-                        cameraPrincipalPoint, mask);
+        this->E = cv::findEssentialMat(this->currFeatures, this->prevFeatures, this->FOCAL_LENGTH,
+                                 this->cameraPrincipalPoint, cv::RANSAC, 0.999, 1.0, this->mask);
+        cv::recoverPose(E, this->currFeatures, this->prevFeatures, this->R, this->t,
+                        this->FOCAL_LENGTH, this->cameraPrincipalPoint, mask);
 
-        cv::Mat prevPts(2, prevFeatures.size(), CV_64F), currPts(2, currFeatures.size(), CV_64F);
+        cv::Mat prevPts(2, this->prevFeatures.size(), CV_64F),
+            currPts(2, this->currFeatures.size(), CV_64F);
 
-        for (int i = 0; i < prevFeatures.size(); i++) {
+        for (int i = 0; i < this->prevFeatures.size(); i++) {
             // this (x,y) combination makes sense as observed from the source code of
             // triangulatePoints on GitHub
-            prevPts.at<double>(0, i) = prevFeatures.at(i).x;
-            prevPts.at<double>(1, i) = prevFeatures.at(i).y;
+            prevPts.at<double>(0, i) = this->prevFeatures.at(i).x;
+            prevPts.at<double>(1, i) = this->prevFeatures.at(i).y;
 
-            currPts.at<double>(0, i) = currFeatures.at(i).x;
-            currPts.at<double>(1, i) = currFeatures.at(i).y;
+            currPts.at<double>(0, i) = this->currFeatures.at(i).x;
+            currPts.at<double>(1, i) = this->currFeatures.at(i).y;
         }
 
-        scale = getAbsoluteScale(numFrame, 0, t.at<double>(2));
+        scale = getAbsoluteScale(numFrame, 0, this->t.at<double>(2));
 
         // std::cout << "Scale is " << scale << std::endl;
 
-        if ((scale > 0.1) && (t.at<double>(2) > t.at<double>(0)) &&
-            (t.at<double>(2) > t.at<double>(1))) {
-            finalTranslationVector = finalTranslationVector + scale * (finalRotationVector * t);
-            finalRotationVector = R * finalRotationVector;
+        if ((scale > 0.1) && (this->t.at<double>(2) > this->t.at<double>(0)) &&
+            (this->t.at<double>(2) > this->t.at<double>(1))) {
+            this->finalTranslationVector =
+                this->finalTranslationVector + scale * (this->finalRotationVector * this->t);
+            this->finalRotationVector = this->R * this->finalRotationVector;
 
         } else {
             // std::cout << "scale below 0.1, or incorrect translation" << std::endl;
         }
 
         // lines for printing results
-        // myfile << finalTranslationVector.at<double>(0) << " " <<
-        // finalTranslationVector.at<double>(1) << " " << finalTranslationVector.at<double>(2) <<
-        // std::endl;
+        // myfile << this->finalTranslationVector.at<double>(0) << " " <<
+        // this->finalTranslationVector.at<double>(1) << " " <<
+        // this->finalTranslationVector.at<double>(2) << std::endl;
 
         // a redetection is triggered in case the number of feautres being trakced go below a
         // particular threshold
-        if (prevFeatures.size() < MIN_NUM_FEAT) {
-            // std::cout << "Number of tracked features reduced to " << prevFeatures.size() <<
+        if (this->prevFeatures.size() < MIN_NUM_FEAT) {
+            // std::cout << "Number of tracked features reduced to " << this->prevFeatures.size() <<
             // std::endl; std::cout << "trigerring redection" << std::endl;
-            featureDetection(prevImage, prevFeatures);
-            featureTracking(prevImage, currentImage, prevFeatures, currFeatures, status);
+            featureDetection(this->prevImage, this->prevFeatures);
+            featureTracking(this->prevImage, this->currentImage, this->prevFeatures,
+                            this->currFeatures, status);
         }
 
-        prevImage = currentImage.clone();
-        prevFeatures = currFeatures;
+        this->prevImage = this->currentImage.clone();
+        this->prevFeatures = this->currFeatures;
 
-        // int x = int(finalTranslationVector.at<double>(0)) + 300;
-        // int y = int(finalTranslationVector.at<double>(2)) + 100;
+        // int x = int(this->finalTranslationVector.at<double>(0)) + 300;
+        // int y = int(this->finalTranslationVector.at<double>(2)) + 100;
         // circle(trajectoryMap, Point(x, y), 1, CV_RGB(255, 0, 0), 2);
 
         // rectangle(trajectoryMap, Point(10, 30), Point(550, 50), Scalar::all(0), cv::FILLED);
         // sprintf(text, "Coordinates: x = %02fm y = %02fm z = %02fm",
-        //         finalTranslationVector.at<double>(0), finalTranslationVector.at<double>(1),
-        //         finalTranslationVector.at<double>(2));
+        //         this->finalTranslationVector.at<double>(0),
+        //         this->finalTranslationVector.at<double>(1),
+        //         this->finalTranslationVector.at<double>(2));
         // putText(trajectoryMap, text, textOrg, fontFace, fontScale, Scalar::all(255), thickness,
         // 8);
 
-        // imshow("Road facing camera", currentImage);
+        // imshow("Road facing camera", this->currentImage);
         // imshow("Trajectory Map", trajectoryMap);
 
-        if (cv::waitKey(1) == 27) {
-            break;
-        }
+        // if (cv::waitKey(1) == 27) {
+        //     break;
+        // }
 
         auto end = std::chrono::high_resolution_clock::now();
         std::chrono::duration<double> elapsed = end - begin;
@@ -251,10 +196,60 @@ void VisualOdometry::run() {
     std::cout << "Frame: " << MAX_FRAME << " FPS: " << fps << " Average FPS: " << averageFps
               << std::endl;
 
-    // std::cout << finalRotationVector << std::endl;
-    // std::cout << finalTranslationVector << std::endl;
+    // std::cout << this->finalRotationVector << std::endl;
+    // std::cout << this->finalTranslationVector << std::endl;
 }
 
 void VisualOdometry::warmup() {
-    
+    cv::Mat img_1, img_2;
+
+    std::ofstream myfile;
+    myfile.open("results1_1.txt");
+
+    char text[100];
+    int fontFace = cv::FONT_HERSHEY_PLAIN;
+    double fontScale = 1;
+    int thickness = 1;
+    cv::Point textOrg(10, 50);
+
+    // read the first two frames from the dataset
+    std::string filename1 = (Constant::Kitti::IMAGE_PATH / "000000.png").string();
+    std::string filename2 = (Constant::Kitti::IMAGE_PATH / "000001.png").string();
+    cv::Mat img_1_c = cv::imread(filename1);
+    cv::Mat img_2_c = cv::imread(filename2);
+
+    if (!img_1_c.data || !img_2_c.data) {
+        std::cout << " --(!) Error reading images " << std::endl;
+        return;
+    }
+
+    // we work with grayscale images
+    cvtColor(img_1_c, img_1, cv::COLOR_BGR2GRAY);
+    cvtColor(img_2_c, img_2, cv::COLOR_BGR2GRAY);
+
+    // feature detection, tracking
+    std::vector<cv::Point2f> points1,
+        points2;                       // vectors to store the coordinates of the feature points
+    featureDetection(img_1, points1);  // detect features in img_1
+    std::vector<uchar> status;
+    featureTracking(img_1, img_2, points1, points2, status);  // track those features to img_2
+
+    // recovering the pose and the essential matrix
+    this->E = cv::findEssentialMat(points2, points1, this->FOCAL_LENGTH, this->cameraPrincipalPoint,
+                                   cv::RANSAC, 0.999, 1.0, this->mask);
+    cv::recoverPose(this->E, points2, points1, this->R, this->t, this->FOCAL_LENGTH,
+                    this->cameraPrincipalPoint, this->mask);
+
+    this->prevImage = img_2;
+    this->currentImage;
+    this->prevFeatures = points2;
+    this->currFeatures;
+
+    this->finalRotationVector = this->R.clone();
+    this->finalTranslationVector = this->t.clone();
+
+    // namedWindow("Road facing camera", WINDOW_AUTOSIZE);
+    // namedWindow("Trajectory Map", WINDOW_AUTOSIZE);
+
+    this->trajectoryMap = cv::Mat::zeros(600, 600, CV_8UC3);
 }
