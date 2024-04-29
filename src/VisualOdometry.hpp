@@ -48,16 +48,60 @@ class VisualOdometry {
     VisualOdometry();
     ~VisualOdometry();
 
+    /**
+     * @brief Feature tracking between two images using optical flow.
+     * 
+     * @param img_1 
+     * @param img_2 
+     * @param points1 
+     * @param points2 
+     * @param status 
+     * 
+     * @return void
+     */
     void featureTracking(cv::Mat img_1, cv::Mat img_2, std::vector<cv::Point2f>& points1,
                          std::vector<cv::Point2f>& points2, std::vector<uchar>& status);
+
+    /**
+     * @brief Feature detection in an image.
+     * 
+     * @param img_1 
+     * @param points1 
+     * 
+     * @return void
+     */
     void featureDetection(cv::Mat img_1, std::vector<cv::Point2f>& points1);
 
+    /**
+     * @brief Get the Absolute Scale object
+     * 
+     * @param frame_id 
+     * @param sequence_id 
+     * @param z_cal 
+     * 
+     * @return double 
+     */
     double getAbsoluteScale(int frame_id, int sequence_id, double z_cal);
 
+    /**
+     * @brief Read the ground truth poses from the KITTI dataset.
+     * 
+     * @return void
+     */
     void readGroundTruthPoses();
 
+    /**
+     * @brief Run the visual odometry pipeline.
+     * 
+     * @return void
+     */
     void run();
 
+    /**
+     * @brief Warm up the visual odometry pipeline.
+     * 
+     * @return void
+     */
     void warmup();
 };
 
