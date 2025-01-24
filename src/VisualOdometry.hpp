@@ -35,14 +35,23 @@ class VisualOdometry {
     cv::Mat finalRotationVector, finalTranslationVector;
     cv::Mat E, R, t, mask;
     cv::Mat trajectoryMap;
+    cv::VideoCapture* cap;
 
-    // TODO: add a fucntion to load these values directly from KITTI's calib files
-    //  WARNING: different sequences in the KITTI VO dataset have different intrinsic/extrinsic
-    //  parameters
-    const double FOCAL_LENGTH = 718.856;
-    const double CX = 607.1928;
-    const double CY = 185.2157;
+    // fx="767.855773858" fy="767.855773858" cx="318.240564418" cy="142.074238737"
+    // k1="0.0583525153274" k2="-1.42298815528" p1="-0.0455457805793" p2="0.00114958025084"
+    // k3="8.83677813991"
+    const double FOCAL_LENGTH_X = 767.855773858;
+    const double FOCAL_LENGTH_Y = 767.855773858;
+    const double CX = 318.240564418;
+    const double CY = 142.074238737;
+    const double K1 = 0.0583525153274;
+    const double K2 = -1.42298815528;
+    const double P1 = -0.0455457805793;
+    const double P2 = 0.00114958025084;
+    const double K3 = 8.83677813991;
+    const cv::Mat cameraMatrix = (cv::Mat_<double>(3, 3) << FOCAL_LENGTH_X, 0, CX, 0, FOCAL_LENGTH_Y, CY, 0, 0, 1);
     const cv::Point2d cameraPrincipalPoint = cv::Point2d(CX, CY);
+    const cv::Mat distCoeffs = (cv::Mat_<double>(5, 1) << K1, K2, P1, P2, K3);
 
    public:
     VisualOdometry();

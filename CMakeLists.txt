@@ -11,6 +11,6 @@ file(GLOB viso
 
 add_compile_options(-std=c++17 -O3)
 
-add_executable( vo ${viso} )
+add_executable( mono-vo ${viso} )
 
-target_link_libraries( vo ${OpenCV_LIBS} )
+target_link_libraries( mono-vo ${OpenCV_LIBS} )
